@@ -1,43 +1,50 @@
 const fs = require('fs');
 
+function splitDate(date) {
+    const newDate = date.split('-');
+    const year = newDate[0];
+    const month = Number(newDate[1]) - 1;
+    const day = newDate[2];
+
+    return new Date(new Date(year, month.toString(), day)).toDateString();
+}
 function save(username) {
     const fileContent = JSON.parse(fs.readFileSync('./users.json'));
-    const userExists = fileContent.some(user => user.username.toLowerCase() === username.toLowerCase());
     var currentUser;
 
-    //If the user exists, the user information will be returned.
-    if (userExists) {
-        return ([user] = fileContent.filter(user => user.username.toLowerCase() === username.toLowerCase()));
-    //Otherwise, the new user will be added to the record and the username and ID for new user will be returned.
-    } else {
-        currentUser = { username, _id: fileContent.length.toString() };
-        fileContent[fileContent.length] = currentUser;
-        fs.writeFileSync('./users.json', JSON.stringify(fileContent, null, '\t'));
-    }
+    currentUser = { username, _id: fileContent.length.toString() };
+    fileContent[fileContent.length] = currentUser;
+
+    fs.writeFileSync('./users.json', JSON.stringify(fileContent, null, '\t'));
 
     return currentUser;
 }
 
 function addExercise({ _id, description, duration, date }) {
     const fileContent = JSON.parse(fs.readFileSync('./users.json'));
-    const [currentUser] = fileContent.filter(user => user._id === _id);
+    const exercises = JSON.parse(fs.readFileSync('./exercises.json')); 
+    var concatenatedDate;
+    var [currentUser] = fileContent.filter(user => user._id === _id);
 
-    if (!currentUser) {
-        return;
-    } else {
-        const exercises = JSON.parse(fs.readFileSync('./exercises.json'));
-        const obj = { username: currentUser.username, 
-            description, 
-            duration: Number(duration), 
-            date: (date ? new Date(date).toDateString() : new Date().toDateString()), 
-            _id 
-        };
-        
-        exercises[exercises.length] = obj;
-        fs.writeFileSync('./exercises.json', JSON.stringify(exercises, null, '\t'));
-        addLog(obj);
-        return obj;
+    if (date && (date.split('-').length === 3)) {
+        concatenatedDate = splitDate(date);
     }
+
+    const obj = { 
+        _id,
+        username: currentUser.username, 
+        date: (concatenatedDate ? concatenatedDate : new Date().toDateString()), 
+        duration: Number(duration), 
+        description
+    };
+    
+    currentUser.description = description;
+    currentUser.duration = Number(duration);
+    currentUser.date = obj.date;
+    exercises[exercises.length] = obj;
+    fs.writeFileSync('./exercises.json', JSON.stringify(exercises, null, '\t'));
+    addLog(obj);
+    return obj;
 }
 
 function addLog({ _id, description, duration, date, username }) {
@@ -66,14 +73,65 @@ function addLog({ _id, description, duration, date, username }) {
     }
 }
 
-function sendUserLog(_id) {
+function obtainUserLog(_id) {
     const userId = _id;
     const logs = JSON.parse(fs.readFileSync('./logs.json'));
-    const [userLog] = logs.filter(log => log._id === userId);
+    var [userLog] = logs.filter(log => log._id === userId);
 
-    if (!userLog)
-        return;
     return userLog;
 }
 
-module.exports = { save, addExercise, sendUserLog };
+function obtainBasedOnDateAndLimit(_id, { from, to, limit }) {
+    const users = JSON.parse(fs.readFileSync('./logs.json'));
+    const [currentUser] = users.filter(user => user._id === _id);
+    var newLog = [];
+    var logs = [];
+    var logDates = [];
+    var logIndex = 0;
+    var iterationCount;
+
+    for (var i = 0; i < currentUser.log.length; i++) {
+        logDates[i] = Date.parse(currentUser.log[i].date);
+    }
+
+    if (!currentUser) {
+        console.log('Looks like there is no user with an ID ' + _id + '.')
+        return ({ notFound: 'User not found' });
+    } 
+
+    if (from) {
+        currentUser.from = splitDate(from)
+    }
+
+    if (to) {
+        currentUser.to = splitDate(to);
+
+        for (var i = 0; i < currentUser.log.length; i++) {
+            if (logDates[i] >= Date.parse(from) && logDates[i] <= Date.parse(to)) {
+                logs[logIndex] = currentUser.log[i];
+                logIndex++;
+            }
+        }
+    } else if (from){
+        logs = currentUser.log.filter((l, index) => logDates[index] >= Date.parse(from));
+    } else {
+        logs = [...currentUser.log];
+    }
+ 
+    if (limit) {
+        limit = Number(limit);
+        iterationCount = (limit > logs.length) ? logs.length : limit;
+    } else {
+        iterationCount = logs.length;
+    }
+
+    for (var i = 0; i < iterationCount; i++) {
+        newLog[i] = logs[i];
+    }
+
+    currentUser.log = [...newLog];
+
+    return currentUser;
+};
+
+module.exports = { save, addExercise, obtainUserLog, obtainBasedOnDateAndLimit };

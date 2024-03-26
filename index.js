@@ -2,7 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const app = express();
 const cors = require('cors');
-const { save, addExercise, sendUserLog } = require('./util');
+const { save, addExercise, obtainUserLog, obtainBasedOnDateAndLimit } = require('./util');
 require('dotenv').config();
 
 const listener = app.listen(process.env.PORT || 3000, () => {
@@ -23,11 +23,19 @@ app.get('/api/users', (req, res) => {
   res.json(users);
 });
 
-app.get('/api/users/:_id/logs', (req, res) => {
-  const userLog = sendUserLog(req.params._id);
-
-  res.json(userLog);
-})
+app.get('/api/users/:_id/logs/', (req, res) => {
+  if (req.query.limit && !(req.query.from)) {
+    const userLog = obtainBasedOnDateAndLimit(req.params._id, req.query);
+    res.json(userLog);
+  } else if (!(req.query.from)) {
+    const userLog = obtainUserLog(req.params._id);
+    res.json(userLog);
+  } else {
+    const logs = obtainBasedOnDateAndLimit(req.params._id, req.query);
+    res.json(logs);
+  }
+  
+});
 
 app.post('/api/users', (req, res) => {
   const username = req.body.username;
@@ -40,6 +48,5 @@ app.post('/api/users/:_id/exercises', (req, res) => {
   const { description, duration, date } = req.body;
   const _id = req.params._id;
   const obj = addExercise({ _id, description, duration, date });
-
   res.json(obj);
 });
